@@ -8,12 +8,104 @@
 </head>
 <body>
   <h1>Spotify Web Playback SDK Demo</h1>
-  <button onclick="loginWithSpotify()">Login with Spotify</button>
+  <button id="login-btn">Login with Spotify</button>
   <div id="profile"></div>
   <div id="player-status" style="margin-top: 20px;"></div>
   <div>
     <button onclick="play()">▶️ Play Sample Track</button>
   </div>
-  <script src="player.js"></script>
+  <script>
+    const clientId = '65cdc10a96b14d8383f2f947b12948d1';
+    const redirectUri = 'https://gcuore.github.io/spotify-auth-app/callback.html';
+    const scopes = ['streaming', 'user-read-email', 'user-read-private'];
+
+    // Redirect to Spotify login page
+    function loginWithSpotify() {
+      const authUrl = `https://accounts.spotify.com/authorize` +
+        `?client_id=${clientId}` +
+        `&response_type=token` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&scope=${encodeURIComponent(scopes.join(' '))}`;
+
+      window.location.href = authUrl;
+    }
+
+    // Handle login button click
+    document.getElementById('login-btn').addEventListener('click', () => {
+      loginWithSpotify();
+    });
+
+    window.addEventListener('load', () => {
+      const token = localStorage.getItem('spotify_access_token');
+      if (token) {
+        document.getElementById('profile').innerHTML = `<p>Logged in successfully</p>`;
+        initializeSpotifyPlayer();
+      }
+    });
+
+    // Initialize Spotify Web Playback SDK
+    function initializeSpotifyPlayer() {
+      const token = localStorage.getItem('spotify_access_token');
+      if (!token) return;
+
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        const player = new Spotify.Player({
+          name: 'Gcuore Web Player',
+          getOAuthToken: cb => { cb(token); },
+          volume: 0.5
+        });
+
+        player.addListener('ready', ({ device_id }) => {
+          document.getElementById('player-status').innerText = 'Player is ready! Device ID: ' + device_id;
+          window.spotifyDeviceId = device_id;
+        });
+
+        player.addListener('not_ready', ({ device_id }) => {
+          document.getElementById('player-status').innerText = 'Device ID has gone offline ' + device_id;
+        });
+
+        player.addListener('initialization_error', ({ message }) => {
+          console.error(message);
+        });
+
+        player.addListener('authentication_error', ({ message }) => {
+          console.error(message);
+        });
+
+        player.connect();
+
+        // Fetch user profile
+        fetch('https://api.spotify.com/v1/me', {
+          headers: { Authorization: 'Bearer ' + token }
+        })
+          .then(res => res.json())
+          .then(profile => {
+            document.getElementById('profile').innerHTML = \`
+              <p><strong>Logged in as:</strong> \${profile.display_name}</p>
+              <p><strong>Email:</strong> \${profile.email}</p>
+            \`);
+          });
+      };
+    }
+
+    // Play a sample track
+    function play() {
+      const token = localStorage.getItem('spotify_access_token');
+      if (!token) {
+        alert('You need to login first!');
+        return;
+      }
+
+      const device_id = window.spotifyDeviceId;
+      fetch('https://api.spotify.com/v1/me/player/play?device_id=' + device_id, {
+        method: 'PUT',
+        body: JSON.stringify({ uris: ['spotify:track:7GhIk7Il098yCjg4BQjzvb'] }), // Example track URI
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+      });
+    }
+  </script>
 </body>
 </html>
